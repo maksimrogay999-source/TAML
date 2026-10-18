@@ -1,56 +1,68 @@
-# Пути к NDK и компилятору
-NDK_PATH := $(HOME)/android-sdk/ndk/android-ndk-r29
-TOOLCHAIN := $(NDK_PATH)/toolchains/llvm/prebuilt/linux-x86_64/bin
-CXX := $(TOOLCHAIN)/aarch64-linux-android24-clang++
+NDK_PATH      := $(HOME)/android-sdk/ndk/android-ndk-r29
+TOOLCHAIN     := $(NDK_PATH)/toolchains/llvm/prebuilt/linux-x86_64/bin
+CXX           := $(TOOLCHAIN)/aarch64-linux-android24-clang++
 
-# Пути к Android SDK (для javac и d8)
-ANDROID_HOME := $(HOME)/android-sdk
-PLATFORM_JAR := $(ANDROID_HOME)/platforms/android-34/android.jar
-D8 := $(ANDROID_HOME)/build-tools/34.0.0/d8
+ANDROID_HOME  := $(HOME)/android-sdk
+PLATFORM_JAR  := $(ANDROID_HOME)/platforms/android-34/android.jar
+D8            := $(ANDROID_HOME)/build-tools/34.0.0/d8
 
-# Флаги компиляции и линковки для C++
-CXXFLAGS := -shared -fPIC -O2 -Wall -I/data/data/com.termux/files/usr/include/luajit-2.1
-LDFLAGS := -llog -ldl -static-libstdc++
-LUAJIT_LIB := libluajit.a
+CXXFLAGS      := -shared -fPIC -O2 -Wall \
+                 -I/data/data/com.termux/files/usr/include/luajit-2.1 \
+                 -I$(HOME)/TAML
+LDFLAGS       := -llog -ldl -static-libstdc++ -L$(HOME)/TAML -lluajit
 
-# Исходники и цели
-SRC_CPP := main.cpp
-TARGET_SO := build/libmodloader.so
+LIBS          := classes.jar core.jar
 
-JAVA_SRC := MOD.java
-JAVA_CLASS := out/com/modloader/loader/MOD.class
-TARGET_DEX := build/classesX.dex
+SRC_CPP       := main.cpp
+JAVA_SRC      := MOD.java
 
-# Цель по умолчанию
+BUILD_DIR     := build
+OUT_DIR       := out
+TARGET_SO     := $(BUILD_DIR)/libmodloader.so
+TARGET_DEX    := $(BUILD_DIR)/classesX.dex
+
+.PHONY: all build clean native java help
+
 all: build
 
-# Сборка всего
-build: $(TARGET_SO) $(TARGET_DEX)
-	@echo "Build complete. Files are in the 'build/' directory."
+build: native java
+	@echo "✅ Build complete. Files are in the '$(BUILD_DIR)/' directory."
 
-# Сборка нативной библиотеки
-$(TARGET_SO): $(SRC_CPP) $(LUAJIT_LIB)
-	@mkdir -p build
-	$(CXX) $(CXXFLAGS) -o $@ $(SRC_CPP) $(LUAJIT_LIB) $(LDFLAGS)
+native: $(TARGET_SO)
 
-# Сборка Java-класса
-$(JAVA_CLASS): $(JAVA_SRC)
-	@mkdir -p out
-	javac -source 8 -target 8 \
+$(TARGET_SO): $(SRC_CPP)
+	@mkdir -p $(BUILD_DIR)
+	$(CXX) $(CXXFLAGS) -o $@ $(SRC_CPP) $(LDFLAGS)
+
+java: $(TARGET_DEX)
+
+$(OUT_DIR)/.javac_done: $(JAVA_SRC)
+	@rm -rf $(OUT_DIR)
+	@mkdir -p $(OUT_DIR)
+	javac -source 8 -target 8 -Xlint:-options \
 	  -bootclasspath $(PLATFORM_JAR) \
-	  -d out/ \
+	  -classpath $(LIBS) \
+	  -d $(OUT_DIR)/ \
 	  $(JAVA_SRC)
+	@touch $(OUT_DIR)/.javac_done
 
-# Конвертация класса в dex
-$(TARGET_DEX): $(JAVA_CLASS)
-	@mkdir -p build
-	$(D8) --output build/ \
+$(TARGET_DEX): $(OUT_DIR)/.javac_done
+	@mkdir -p $(BUILD_DIR)
+	cd $(OUT_DIR) && jar cf ../$(BUILD_DIR)/classes.jar .
+	$(D8) --output $(BUILD_DIR)/ \
 	  --lib $(PLATFORM_JAR) \
-	  $(JAVA_CLASS)
-	mv build/classes.dex $(TARGET_DEX)
+	  $(BUILD_DIR)/classes.jar \
+	  $(LIBS)
+	@if [ -f "$(BUILD_DIR)/classes.dex" ]; then mv $(BUILD_DIR)/classes.dex $(TARGET_DEX); fi
+	@rm -f $(BUILD_DIR)/classes.jar
 
-# Очистка
 clean:
-	rm -rf build out
+	rm -rf $(BUILD_DIR) $(OUT_DIR)
+	@echo "🧹 Cleaned."
 
-.PHONY: all build clean
+help:
+	@echo "TAML Mod Loader - Makefile targets:"
+	@echo "  make all     - Build everything (native + java)"
+	@echo "  make native  - Build only libmodloader.so"
+	@echo "  make java    - Build only classesX.dex"
+	@echo "  make clean   - Remove build artifacts"

@@ -68,6 +68,9 @@ If you want to look at the code or help with development:
 Not chosen yet. Until development is complete, the code is not recommended for use in third-party projects.
 Пока не выбрана. До завершения разработки код не рекомендуется использовать в сторонних проектах.
 
+Внимание это не будет работать для пиратской версии с сайта pdalife
+Note: This will not work for the pirated version from pdalife 
+
 ---
 
 **Stay tuned. Once a working version is available, installation instructions will be added here.**
